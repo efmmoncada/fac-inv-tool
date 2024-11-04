@@ -34,7 +34,7 @@ export default [
         jsx: true, // Enable JSX parsing
       },
     },
-    
+
     // Plugins to be used
     plugins: {
       react: require('eslint-plugin-react'),
@@ -44,7 +44,7 @@ export default [
       'react-refresh': require('eslint-plugin-react-refresh'),
       import: require('eslint-plugin-import'),
     },
-    
+
     // ESLint rule configurations (extends equivalent in Flat Config)
     rules: {
       ...require('eslint-plugin-react').configs.recommended.rules,
@@ -53,7 +53,7 @@ export default [
       ...require('eslint-plugin-prettier').configs.recommended.rules,
       'prettier/prettier': 'error', // Prettier formatting as an ESLint rule
     },
-    
+
     settings: {
       react: {
         version: 'detect',  // Automatically detect the React version

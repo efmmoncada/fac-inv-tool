@@ -1,62 +1,95 @@
-import { useState } from 'react';
-import logo from './assets/images/logo.svg';
+import { Button } from '@nextui-org/react';
+import { PDFDocument } from 'pdf-lib';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { searchFile } from './utils/serachFiles';
+import { getFile } from './utils/getFile';
 
 const App = () => {
-  const [count, setCount] = useState(0);
+  const holdingDoc = useRef<PDFDocument>();
+  const workingDoc = useRef<PDFDocument>();
+
+  const [gapiLoaded, setGapiLoaded] = useState(false);
+  const [gIsInited, setGisInited] = useState(false);
+  const tokenClient = useRef<google.accounts.oauth2.TokenClient>();
+
+  const [iframeSrc, setIframeSrc] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      gapi.load('client', async () => {
+        await gapi.client.init({
+          apiKey: import.meta.env.VITE_GAPI_API_KEY,
+          discoveryDocs: [
+            'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
+          ],
+          clientId: import.meta.env.VITE_GAPI_CLIENT_ID,
+        });
+        setGapiLoaded(true);
+      });
+
+      tokenClient.current = google.accounts.oauth2.initTokenClient({
+        client_id: import.meta.env.VITE_GAPI_CLIENT_ID,
+        scope:
+          'https://www.googleapis.com/auth/drive.metadata.readonly https://www.googleapis.com/auth/drive.readonly',
+        callback: async () => {
+          await fetchHoldingDoc();
+        },
+      });
+      setGisInited(true);
+    })();
+  }, []);
+
+  async function fetchHoldingDoc() {
+    // const files = await searchFile({ q: "name contains 'fac_inv_hold_doc'" });
+    const files = await searchFile({ q: "name contains 'Accessory'" });
+    if (!files) return;
+
+    const holdingFileId = files[0].id;
+    if (!holdingFileId) return;
+
+    const holdingFileBytes = await getFile({ fileId: holdingFileId });
+    if (!holdingFileBytes) return;
+
+    const binString = Array.from(
+      new TextEncoder().encode(holdingFileBytes),
+      (byte) => String.fromCodePoint(byte),
+    ).join('');
+
+    holdingDoc.current = await PDFDocument.load(btoa(binString));
+
+    const uri = await holdingDoc.current.saveAsBase64({ dataUri: true });
+    setIframeSrc(uri);
+  }
+
+  const onAuthClick = useCallback(async () => {
+    if (!tokenClient.current) return;
+
+    if (gapi.client.getToken() === null) {
+      // Prompt the user to select a Google Account and ask for consent to share their data
+      // when establishing a new session.
+      tokenClient.current.requestAccessToken({ prompt: 'consent' });
+    } else {
+      // Skip display of account chooser and consent dialog for an existing session.
+      tokenClient.current.requestAccessToken({ prompt: '' });
+    }
+  }, []);
+
+  const signOut = useCallback(() => {
+    const token = gapi.client.getToken();
+    if (token !== null) {
+      google.accounts.oauth2.revoke(token.access_token, () => {});
+    }
+  }, []);
 
   return (
-    <div className="text-center selection:bg-green-900">
-      <header className="flex min-h-screen flex-col items-center justify-center bg-[#282c34] text-white">
-        <img
-          src={logo}
-          className="animate-speed h-60 motion-safe:animate-spin"
-          alt="logo"
-        />
-        <style>
-          {
-            '\
-            .animate-speed{\
-              animation-duration:20s;\
-            }\
-          '
-          }
-        </style>
-        <p className="bg-gradient-to-r from-emerald-300 to-sky-300 bg-clip-text text-5xl font-black text-transparent selection:bg-transparent">
-          Vite + React + Typescript + Tailwindcss
-        </p>
-        <p className="mt-3">
-          <button
-            type="button"
-            className="my-6 rounded bg-gray-300 px-2 py-2 text-[#282C34] transition-all hover:bg-gray-200"
-            onClick={() => setCount((count) => count + 1)}
-          >
-            count is: {count}
-          </button>
-        </p>
-        <p>
-          Edit <code className="text-[#8d96a7]">App.tsx</code> and save to test
-          HMR updates.
-        </p>
-        <p className="mt-3 flex gap-3 text-center text-[#8d96a7]">
-          <a
-            className="text-[#61dafb] transition-all hover:text-blue-400"
-            href="https://reactjs.org"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Learn React
-          </a>
-          {' | '}
-          <a
-            className="text-[#61dafb] transition-all hover:text-blue-400"
-            href="https://vitejs.dev/guide/features.html"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Vite Docs
-          </a>
-        </p>
-      </header>
+    <div>
+      <iframe src={iframeSrc} />
+      <Button onClick={onAuthClick} isDisabled={!(gapiLoaded && gIsInited)}>
+        Authorize
+      </Button>
+      <Button onClick={signOut} isDisabled={!(gapiLoaded && gIsInited)}>
+        Sign Out
+      </Button>
     </div>
   );
 };
